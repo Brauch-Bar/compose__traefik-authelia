@@ -1,0 +1,82 @@
+version: '2.4'
+
+secrets:
+  authelia_jwt_secret:
+    file: </path/to/authelia>/secrets/AUTHELIA_JWT_SECRET
+  authelia_session_secret:
+    file: </path/to/authelia>/secrets/AUTHELIA_SESSION_SECRET
+  authelia_notifier_smtp_password:
+    file: </path/to/authelia>/secrets/AUTHELIA_NOTIFIER_SMTP_PASSWORD
+  authelia_storage_encryption_key:
+    file: </path/to/authelia>/secrets/AUTHELIA_STORAGE_ENCRYPTION_KEY
+    
+services:
+  traefik:
+    image: traefik:latest
+    container_name: traefik
+    restart: always
+    networks:
+      - proxy
+    ports:
+      - 80:80
+      - 443:443
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - </path/to/traefik>/data/traefik.yml:/traefik.yml:ro
+      - </path/to/traefik>/data/configs:/configs:ro
+      - </path/to/traefik>/data/acme.json:/acme.json:rw
+      - </path/to/traefik>/data/logs:/logs:rw
+    environment:
+      - CF_DNS_API_TOKEN=${CFAPI}
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.traefik-https.entrypoints=https
+      - traefik.http.routers.traefik-https.rule=Host(`proxy.local.domain.com`)
+      - traefik.http.middlewares.traefik-auth.basicauth.users=${TRAEFIKADMIN}
+      - traefik.http.routers.traefik-https.middlewares=traefik-auth
+      - traefik.http.middlewares.redirect-https.redirectScheme.scheme=https
+      - traefik.http.middlewares.redirect-https.redirectScheme.permanent=true
+      - traefik.http.routers.traefik-https.service=api@internal
+      - traefik.http.routers.traefik-https.tls=true
+      - traefik.http.routers.traefik-https.tls.certresolver=dns
+      - traefik.http.routers.traefik-https.tls.domains[0].main=domain.com
+      - traefik.http.routers.traefik-https.tls.domains[0].sans=*.domain.com
+      - traefik.http.routers.traefik-https.tls.domains[0].sans=*.local.domain.com
+      - traefik.http.middlewares.authelia.forwardauth.address=http://authelia:9091/api/verify?rd=https://auth.domain.com/
+      - traefik.http.middlewares.authelia.forwardauth.trustforwardheader=true
+      - traefik.http.middlewares.authelia.forwardauth.authresponseheaders=Remote-User, Remote-Groups
+    read_only: true
+
+  authelia:
+    image: authelia/authelia
+    container_name: authelia
+    volumes:
+      - </path/to/authelia>:/config
+    networks:
+      - proxy
+    secrets:
+      - authelia_jwt_secret
+      - authelia_session_secret
+      - authelia_notifier_smtp_password
+      - authelia_storage_encryption_key
+    environment:
+      - TZ=Europe/Berlin
+      - AUTHELIA_JWT_SECRET_FILE=/run/secrets/authelia_jwt_secret
+      - AUTHELIA_SESSION_SECRET_FILE=/run/secrets/authelia_session_secret
+      - AUTHELIA_NOTIFIER_SMTP_PASSWORD_FILE=/run/secrets/authelia_notifier_smtp_password
+      - AUTHELIA_STORAGE_ENCRYPTION_KEY_FILE=/run/secrets/authelia_storage_encryption_key
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.authelia-https.rule=Host(`auth.brauch.bar`)      
+      - traefik.http.routers.authelia-https.entrypoints=https
+      - traefik.http.routers.authelia-https.tls=true
+      - traefik.http.routers.authelia-https.service=authelia-svc
+      - traefik.http.services.authelia-svc.loadbalancer.server.port=9091
+    expose:
+      - 9091
+    restart: unless-stopped
+
+networks:
+  proxy:
+    external: true

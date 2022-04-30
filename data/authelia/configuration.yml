@@ -1,0 +1,66 @@
+server:
+  host: 0.0.0.0
+  port: 9091
+log:
+  level: info
+default_redirection_url: https://domain.com
+totp:
+  issuer: domain.com
+  period: 30
+  skew: 1
+authentication_backend:
+  disable_reset_password: false
+  file:
+    path: /config/users_database.yml
+    password:
+      algorithm: argon2id
+      iterations: 1
+      key_length: 32
+      salt_length: 16
+      memory: 512
+      parallelism: 8
+access_control:
+  default_policy: deny
+  rules:
+    - domain:
+      - domain.com
+      - "*.domain.com"
+      policy: bypass
+      networks:
+        - 192.168.0.0/16
+        - 172.16.0.0/12
+        - 10.0.0.0/8
+    - domain:
+      - domain.com
+      - "*.domain.com"
+      policy: two_factor
+session:
+  name: authelia_session
+  expiration: 1h
+  inactivity: 5m
+  remember_me_duration: 1M
+  domain: domain.com
+
+regulation:
+  max_retries: 3
+  find_time: 2m
+  ban_time: 5m
+
+storage:
+  local:
+    path: /config/db.sqlite3
+
+notifier:
+  disable_startup_check: false
+  smtp:
+    username: your.name@domain.com
+#     password:
+    host: smtp.gmail.com
+    port: 587
+    sender: sender@domain.com
+    subject: "[Authelia] {title}"
+    startup_check_address: test@authelia.com
+    disable_require_tls: false
+    disable_html_emails: false
+    tls:
+      skip_verify: false
